@@ -10,6 +10,12 @@ services:
       - config1_data:/data/db
     networks:
       - mongo-network
+    healthcheck:
+      test: ["CMD", "mongosh", "--port", "27017", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   config2:
     container_name: config2
@@ -19,6 +25,12 @@ services:
       - config2_data:/data/db
     networks:
       - mongo-network
+    healthcheck:
+      test: ["CMD", "mongosh", "--port", "27017", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   config3:
     container_name: config3
@@ -28,6 +40,12 @@ services:
       - config3_data:/data/db
     networks:
       - mongo-network
+    healthcheck:
+      test: ["CMD", "mongosh", "--port", "27017", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   # Первый шард (Shard 1) - 3 реплики
   shard1_1:
@@ -38,6 +56,12 @@ services:
       - shard1_1_data:/data/db
     networks:
       - mongo-network
+    healthcheck:
+      test: ["CMD", "mongosh", "--port", "27018", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   shard1_2:
     container_name: shard1_2
@@ -47,6 +71,12 @@ services:
       - shard1_2_data:/data/db
     networks:
       - mongo-network
+    healthcheck:
+      test: ["CMD", "mongosh", "--port", "27018", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   shard1_3:
     container_name: shard1_3
@@ -56,6 +86,12 @@ services:
       - shard1_3_data:/data/db
     networks:
       - mongo-network
+    healthcheck:
+      test: ["CMD", "mongosh", "--port", "27018", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   # Второй шард (Shard 2) - 3 реплики
   shard2_1:
@@ -66,6 +102,12 @@ services:
       - shard2_1_data:/data/db
     networks:
       - mongo-network
+    healthcheck:
+      test: ["CMD", "mongosh", "--port", "27019", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   shard2_2:
     container_name: shard2_2
@@ -75,6 +117,12 @@ services:
       - shard2_2_data:/data/db
     networks:
       - mongo-network
+    healthcheck:
+      test: ["CMD", "mongosh", "--port", "27019", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   shard2_3:
     container_name: shard2_3
@@ -84,6 +132,12 @@ services:
       - shard2_3_data:/data/db
     networks:
       - mongo-network
+    healthcheck:
+      test: ["CMD", "mongosh", "--port", "27019", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   # Mongos Router для маршрутизации запросов
   mongos:
@@ -91,19 +145,34 @@ services:
     image: dh-mirror.gitverse.ru/mongo:latest
     command: mongos --configdb configReplSet/config1:27017,config2:27017,config3:27017 --port 27017
     depends_on:
-      - config1
-      - config2
-      - config3
-      - shard1_1
-      - shard1_2
-      - shard1_3
-      - shard2_1
-      - shard2_2
-      - shard2_3
+      config1:
+        condition: service_healthy
+      config2:
+        condition: service_healthy
+      config3:
+        condition: service_healthy
+      shard1_1:
+        condition: service_healthy
+      shard1_2:
+        condition: service_healthy
+      shard1_3:
+        condition: service_healthy
+      shard2_1:
+        condition: service_healthy
+      shard2_2:
+        condition: service_healthy
+      shard2_3:
+        condition: service_healthy
     ports:
       - "27017:27017"
     networks:
       - mongo-network
+    healthcheck:
+      test: ["CMD", "mongosh", "--port", "27017", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   # API приложение
   pymongo_api:
@@ -112,7 +181,8 @@ services:
       context: api_app
       dockerfile: Dockerfile
     depends_on:
-      - mongos
+      mongos:
+        condition: service_healthy
     ports:
       - "8080:8080"
     environment:

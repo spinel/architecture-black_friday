@@ -10,6 +10,12 @@ services:
       - config1_data:/data/db
     networks:
       - mongo-network
+    healthcheck:
+      test: ["CMD", "mongosh", "--port", "27017", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   # Первый шард (Shard 1)
   shard1:
@@ -20,6 +26,12 @@ services:
       - shard1_data:/data/db
     networks:
       - mongo-network
+    healthcheck:
+      test: ["CMD", "mongosh", "--port", "27018", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   # Второй шард (Shard 2)
   shard2:
@@ -30,6 +42,12 @@ services:
       - shard2_data:/data/db
     networks:
       - mongo-network
+    healthcheck:
+      test: ["CMD", "mongosh", "--port", "27019", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   # Mongos Router для маршрутизации запросов
   mongos:
@@ -37,13 +55,22 @@ services:
     image: dh-mirror.gitverse.ru/mongo:latest
     command: mongos --configdb configReplSet/config1:27017 --port 27017
     depends_on:
-      - config1
-      - shard1
-      - shard2
+      config1:
+        condition: service_healthy
+      shard1:
+        condition: service_healthy
+      shard2:
+        condition: service_healthy
     ports:
       - "27017:27017"
     networks:
       - mongo-network
+    healthcheck:
+      test: ["CMD", "mongosh", "--port", "27017", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   # API приложение
   pymongo_api:
@@ -52,7 +79,8 @@ services:
       context: api_app
       dockerfile: Dockerfile
     depends_on:
-      - mongos
+      mongos:
+        condition: service_healthy
     ports:
       - "8080:8080"
     environment:
