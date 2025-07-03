@@ -1,189 +1,200 @@
-# MongoDB Sharding Project
+# Архитектура MongoDB с шардированием, репликацией и кешированием
 
-## Описание
+## Описание архитектуры
 
-Данный проект демонстрирует реализацию шардирования MongoDB для повышения производительности и масштабируемости системы. Архитектура включает:
+Данный проект реализует высоконагруженную архитектуру для онлайн-магазина "Мобильный мир" с использованием:
 
-- **Config Server**: Хранение метаданных о распределении данных
-- **Mongos Router**: Маршрутизация запросов к шардам
-- **Shard 1**: Первый шард на порту 27018
-- **Shard 2**: Второй шард на порту 27019
-- **API Application**: FastAPI приложение для работы с данными
+### 🗄️ Шардирование MongoDB
+- **2 шарда** для распределения нагрузки
+- **Hashed sharding** по полю `name` для равномерного распределения данных
+- **Config Server** (3 реплики) для хранения метаданных шардирования
+- **Mongos Router** для маршрутизации запросов к шардам
 
-## Запуск проекта
+### 🔄 Репликация MongoDB
+- **3 реплики на каждый шард** для отказоустойчивости
+- **Автоматический failover** при отказе primary реплики
+- **Read preferences** для распределения нагрузки чтения
 
-### 1. Запуск сервисов
+### ⚡ Кеширование Redis
+- **Redis 7** для кеширования часто запрашиваемых данных
+- **FastAPI Cache** с TTL 60 секунд для API эндпоинтов
+- **Автоматическая инвалидация** кеша при изменениях
 
+## Архитектурная схема
+
+```
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   Config Server │    │   Config Server │    │   Config Server │
+│   (config1)     │    │   (config2)     │    │   (config3)     │
+│   Port: 27019   │    │   Port: 27019   │    │   Port: 27019   │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+         │                       │                       │
+         └───────────────────────┼───────────────────────┘
+                                 │
+                    ┌─────────────────┐
+                    │   Mongos Router │
+                    │   Port: 27017   │
+                    └─────────────────┘
+                                 │
+         ┌───────────────────────┼───────────────────────┐
+         │                       │                       │
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   Shard 1       │    │   Shard 2       │    │     Redis       │
+│   Replica Set   │    │   Replica Set   │    │   Port: 6379    │
+│   Port: 27018   │    │   Port: 27020   │    │                 │
+│                 │    │                 │    │                 │
+│ ┌─────────────┐ │    │ ┌─────────────┐ │    │                 │
+│ │ Primary     │ │    │ │ Primary     │ │    │                 │
+│ │ Replica 1   │ │    │ │ Replica 1   │ │    │                 │
+│ └─────────────┘ │    │ └─────────────┘ │    │                 │
+│ ┌─────────────┐ │    │ ┌─────────────┐ │    │                 │
+│ │ Secondary   │ │    │ │ Secondary   │ │    │                 │
+│ │ Replica 2   │ │    │ │ Replica 2   │ │    │                 │
+│ └─────────────┘ │    │ └─────────────┘ │    │                 │
+│ ┌─────────────┐ │    │ ┌─────────────┐ │    │                 │
+│ │ Secondary   │ │    │ │ Secondary   │ │    │                 │
+│ │ Replica 3   │ │    │ │ Replica 3   │ │    │                 │
+│ └─────────────┘ │    │ └─────────────┘ │    │                 │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+         │                       │                       │
+         └───────────────────────┼───────────────────────┘
+                                 │
+                    ┌─────────────────┐
+                    │   FastAPI App   │
+                    │   Port: 8080    │
+                    └─────────────────┘
+```
+
+## Запуск системы
+
+### 1. Запуск всех сервисов
 ```bash
 docker compose up -d
 ```
 
-### 2. Ожидание запуска
-
-Подождите 30-60 секунд для полного запуска всех сервисов MongoDB.
-
-## Инициализация шардирования
-
-### Шаг 1: Инициализация Config Server Replica Set
-
+### 2. Инициализация шардирования
 ```bash
-docker compose exec -T config1 mongosh --port 27017 --quiet <<EOF
-rs.initiate({
-  _id: 'configReplSet',
-  configsvr: true,
-  members: [
-    { _id: 0, host: 'config1:27017' }
-  ]
-})
-EOF
+chmod +x scripts/mongo-init.sh
+./scripts/mongo-init.sh
 ```
 
-### Шаг 2: Инициализация Shard 1 Replica Set
-
+### 3. Проверка статуса
 ```bash
-docker compose exec -T shard1 mongosh --port 27018 --quiet <<EOF
-rs.initiate({
-  _id: 'shard1ReplSet',
-  members: [
-    { _id: 0, host: 'shard1:27018' }
-  ]
-})
-EOF
-```
+# Автоматическая проверка всех компонентов
+chmod +x scripts/check-status.sh
+./scripts/check-status.sh
 
-### Шаг 3: Инициализация Shard 2 Replica Set
-
-```bash
-docker compose exec -T shard2 mongosh --port 27019 --quiet <<EOF
-rs.initiate({
-  _id: 'shard2ReplSet',
-  members: [
-    { _id: 0, host: 'shard2:27019' }
-  ]
-})
-EOF
-```
-
-### Шаг 4: Ожидание синхронизации
-
-Подождите 30 секунд для синхронизации replica sets:
-
-```bash
-sleep 30
-```
-
-### Шаг 5: Добавление шардов в кластер
-
-```bash
-docker compose exec -T mongos mongosh --port 27017 --quiet <<EOF
-sh.addShard('shard1ReplSet/shard1:27018')
-sh.addShard('shard2ReplSet/shard2:27019')
-EOF
-```
-
-### Шаг 6: Включение шардирования для базы данных
-
-```bash
-docker compose exec -T mongos mongosh --port 27017 --quiet <<EOF
-use somedb
-sh.enableSharding('somedb')
-EOF
-```
-
-### Шаг 7: Настройка ключа шардирования для коллекции
-
-```bash
-docker compose exec -T mongos mongosh --port 27017 --quiet <<EOF
-use somedb
-sh.shardCollection('somedb.helloDoc', { '_id': 'hashed' })
-EOF
-```
-
-### Шаг 8: Заполнение базы данных тестовыми данными
-
-```bash
-docker compose exec -T mongos mongosh --port 27017 --quiet <<EOF
-use somedb
-for(var i = 0; i < 1000; i++) {
-  db.helloDoc.insertOne({
-    age: i, 
-    name: 'user' + i,
-    email: 'user' + i + '@example.com',
-    created_at: new Date()
-  })
-}
-EOF
-```
-
-## Проверка работы
-
-### Проверка статуса шардирования
-
-```bash
+# Или ручная проверка:
+# Проверка статуса шардирования
 docker compose exec -T mongos mongosh --port 27017 --quiet <<EOF
 sh.status()
 EOF
-```
 
-### Проверка количества документов в каждом шарде
-
-**Shard 1:**
-```bash
-docker compose exec -T shard1 mongosh --port 27018 --quiet <<EOF
-use somedb
-db.helloDoc.countDocuments()
+# Проверка репликации
+docker compose exec -T shard1_replica1 mongosh --port 27018 --quiet <<EOF
+rs.status()
 EOF
 ```
 
-**Shard 2:**
+### 4. Тестирование производительности
 ```bash
-docker compose exec -T shard2 mongosh --port 27019 --quiet <<EOF
-use somedb
-db.helloDoc.countDocuments()
+# Запуск теста производительности
+chmod +x scripts/load-test.sh
+./scripts/load-test.sh
+```
+
+## API Endpoints
+
+### Основные эндпоинты
+- `GET /` - Информация о топологии MongoDB и статусе кеширования
+- `GET /docs` - Swagger документация API
+- `GET /{collection}/count` - Количество документов в коллекции
+- `GET /{collection}/users` - Список пользователей (с кешированием)
+- `GET /{collection}/users/{name}` - Получение пользователя по имени
+- `POST /{collection}/users` - Создание нового пользователя
+
+### Примеры запросов
+```bash
+# Получение информации о системе
+curl http://localhost:8080/
+
+# Получение количества документов
+curl http://localhost:8080/helloDoc/count
+
+# Получение списка пользователей (кешируется на 60 секунд)
+curl http://localhost:8080/helloDoc/users
+
+# Создание нового пользователя
+curl -X POST http://localhost:8080/helloDoc/users \
+  -H "Content-Type: application/json" \
+  -d '{"name": "test_user", "age": 25}'
+```
+
+## Мониторинг и отладка
+
+### Проверка статуса репликации
+```bash
+# Shard 1
+docker compose exec -T shard1_replica1 mongosh --port 27018 --quiet <<EOF
+rs.status()
+EOF
+
+# Shard 2
+docker compose exec -T shard2_replica1 mongosh --port 27020 --quiet <<EOF
+rs.status()
 EOF
 ```
 
-### Проверка общего количества документов через API
-
-Откройте в браузере: http://localhost:8080
-
-Или выполните:
+### Проверка распределения данных
 ```bash
-curl http://localhost:8080/somedb/count
+# Проверка распределения документов по шардам
+docker compose exec -T mongos mongosh --port 27017 --quiet <<EOF
+use somedb
+db.helloDoc.getShardDistribution()
+EOF
 ```
 
-## Автоматизация инициализации
-
-Для автоматической инициализации всех шагов используйте готовый скрипт:
-
+### Проверка кеширования
 ```bash
-chmod +x init-sharding.sh
-./init-sharding.sh
+# Проверка Redis
+docker compose exec -T redis redis-cli ping
+docker compose exec -T redis redis-cli info memory
 ```
 
-## Остановка проекта
+## Преимущества архитектуры
 
-```bash
-docker compose down -v
-```
+### 🚀 Производительность
+- **Шардирование** распределяет нагрузку между серверами
+- **Кеширование** ускоряет доступ к часто запрашиваемым данным
+- **Горизонтальное масштабирование** позволяет добавлять новые шарды
 
-## Полезные команды
+### 🛡️ Отказоустойчивость
+- **Репликация** обеспечивает резервное копирование данных
+- **Автоматический failover** при отказе primary реплики
+- **Избыточность** на всех уровнях архитектуры
 
-### Просмотр логов
-```bash
-docker compose logs -f mongos
-docker compose logs -f shard1
-docker compose logs -f shard2
-```
+### 📈 Масштабируемость
+- **Легкое добавление шардов** для увеличения производительности
+- **Гибкая настройка** репликации и кеширования
+- **Поддержка высоких нагрузок** при распродажах
 
-### Подключение к MongoDB
-```bash
-# К mongos router
-docker compose exec -T mongos mongosh --port 27017
+## Технические детали
 
-# К shard1
-docker compose exec -T shard1 mongosh --port 27018
+### Порты сервисов
+- **Mongos Router**: 27017
+- **Config Server**: 27019
+- **Shard 1**: 27018
+- **Shard 2**: 27020
+- **Redis**: 6379
+- **FastAPI**: 8080
 
-# К shard2
-docker compose exec -T shard2 mongosh --port 27019
-``` 
+### Настройки шардирования
+- **Тип шардирования**: Hashed
+- **Ключ шардирования**: `name`
+- **Количество шардов**: 2
+- **Реплик на шард**: 3
+
+### Настройки кеширования
+- **TTL**: 60 секунд
+- **Backend**: Redis
+- **Prefix**: `api:cache`

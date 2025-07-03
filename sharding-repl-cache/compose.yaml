@@ -1,223 +1,125 @@
-name: sharding-repl-cache
-
 services:
-  # Config Server для хранения метаданных шардирования (3 реплики)
+  # Config Server для шардирования
   config1:
     container_name: config1
     image: dh-mirror.gitverse.ru/mongo:latest
-    command: mongod --configsvr --replSet configReplSet --port 27017 --dbpath /data/db
+    command: mongod --configsvr --replSet configReplSet --port 27019
+    ports:
+      - "27019:27019"
     volumes:
       - config1_data:/data/db
-    networks:
-      - mongo-network
-    healthcheck:
-      test: ["CMD", "mongosh", "--port", "27017", "--eval", "db.adminCommand('ping')"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
 
   config2:
     container_name: config2
     image: dh-mirror.gitverse.ru/mongo:latest
-    command: mongod --configsvr --replSet configReplSet --port 27017 --dbpath /data/db
+    command: mongod --configsvr --replSet configReplSet --port 27019
     volumes:
       - config2_data:/data/db
-    networks:
-      - mongo-network
-    healthcheck:
-      test: ["CMD", "mongosh", "--port", "27017", "--eval", "db.adminCommand('ping')"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
 
   config3:
     container_name: config3
     image: dh-mirror.gitverse.ru/mongo:latest
-    command: mongod --configsvr --replSet configReplSet --port 27017 --dbpath /data/db
+    command: mongod --configsvr --replSet configReplSet --port 27019
     volumes:
       - config3_data:/data/db
-    networks:
-      - mongo-network
-    healthcheck:
-      test: ["CMD", "mongosh", "--port", "27017", "--eval", "db.adminCommand('ping')"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
 
-  # Первый шард (Shard 1) - 3 реплики
-  shard1_1:
-    container_name: shard1_1
-    image: dh-mirror.gitverse.ru/mongo:latest
-    command: mongod --shardsvr --replSet shard1ReplSet --port 27018 --dbpath /data/db
-    volumes:
-      - shard1_1_data:/data/db
-    networks:
-      - mongo-network
-    healthcheck:
-      test: ["CMD", "mongosh", "--port", "27018", "--eval", "db.adminCommand('ping')"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
-
-  shard1_2:
-    container_name: shard1_2
-    image: dh-mirror.gitverse.ru/mongo:latest
-    command: mongod --shardsvr --replSet shard1ReplSet --port 27018 --dbpath /data/db
-    volumes:
-      - shard1_2_data:/data/db
-    networks:
-      - mongo-network
-    healthcheck:
-      test: ["CMD", "mongosh", "--port", "27018", "--eval", "db.adminCommand('ping')"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
-
-  shard1_3:
-    container_name: shard1_3
-    image: dh-mirror.gitverse.ru/mongo:latest
-    command: mongod --shardsvr --replSet shard1ReplSet --port 27018 --dbpath /data/db
-    volumes:
-      - shard1_3_data:/data/db
-    networks:
-      - mongo-network
-    healthcheck:
-      test: ["CMD", "mongosh", "--port", "27018", "--eval", "db.adminCommand('ping')"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
-
-  # Второй шард (Shard 2) - 3 реплики
-  shard2_1:
-    container_name: shard2_1
-    image: dh-mirror.gitverse.ru/mongo:latest
-    command: mongod --shardsvr --replSet shard2ReplSet --port 27019 --dbpath /data/db
-    volumes:
-      - shard2_1_data:/data/db
-    networks:
-      - mongo-network
-    healthcheck:
-      test: ["CMD", "mongosh", "--port", "27019", "--eval", "db.adminCommand('ping')"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
-
-  shard2_2:
-    container_name: shard2_2
-    image: dh-mirror.gitverse.ru/mongo:latest
-    command: mongod --shardsvr --replSet shard2ReplSet --port 27019 --dbpath /data/db
-    volumes:
-      - shard2_2_data:/data/db
-    networks:
-      - mongo-network
-    healthcheck:
-      test: ["CMD", "mongosh", "--port", "27019", "--eval", "db.adminCommand('ping')"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
-
-  shard2_3:
-    container_name: shard2_3
-    image: dh-mirror.gitverse.ru/mongo:latest
-    command: mongod --shardsvr --replSet shard2ReplSet --port 27019 --dbpath /data/db
-    volumes:
-      - shard2_3_data:/data/db
-    networks:
-      - mongo-network
-    healthcheck:
-      test: ["CMD", "mongosh", "--port", "27019", "--eval", "db.adminCommand('ping')"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
-
-  # Mongos Router для маршрутизации запросов
+  # Mongos Router
   mongos:
     container_name: mongos
     image: dh-mirror.gitverse.ru/mongo:latest
-    command: mongos --configdb configReplSet/config1:27017,config2:27017,config3:27017 --port 27017
-    depends_on:
-      config1:
-        condition: service_healthy
-      config2:
-        condition: service_healthy
-      config3:
-        condition: service_healthy
-      shard1_1:
-        condition: service_healthy
-      shard1_2:
-        condition: service_healthy
-      shard1_3:
-        condition: service_healthy
-      shard2_1:
-        condition: service_healthy
-      shard2_2:
-        condition: service_healthy
-      shard2_3:
-        condition: service_healthy
+    command: mongos --configdb configReplSet/config1:27019,config2:27019,config3:27019 --port 27017 --bind_ip_all
     ports:
       - "27017:27017"
-    networks:
-      - mongo-network
-    healthcheck:
-      test: ["CMD", "mongosh", "--port", "27017", "--eval", "db.adminCommand('ping')"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
+    depends_on:
+      - config1
+      - config2
+      - config3
+
+  # Шард 1 - Реплика 1 (Primary)
+  shard1_replica1:
+    container_name: shard1_replica1
+    image: dh-mirror.gitverse.ru/mongo:latest
+    command: mongod --shardsvr --replSet shard1ReplSet --port 27018
+    ports:
+      - "27018:27018"
+    volumes:
+      - shard1_replica1_data:/data/db
+
+  # Шард 1 - Реплика 2 (Secondary)
+  shard1_replica2:
+    container_name: shard1_replica2
+    image: dh-mirror.gitverse.ru/mongo:latest
+    command: mongod --shardsvr --replSet shard1ReplSet --port 27018
+    volumes:
+      - shard1_replica2_data:/data/db
+
+  # Шард 1 - Реплика 3 (Secondary)
+  shard1_replica3:
+    container_name: shard1_replica3
+    image: dh-mirror.gitverse.ru/mongo:latest
+    command: mongod --shardsvr --replSet shard1ReplSet --port 27018
+    volumes:
+      - shard1_replica3_data:/data/db
+
+  # Шард 2 - Реплика 1 (Primary)
+  shard2_replica1:
+    container_name: shard2_replica1
+    image: dh-mirror.gitverse.ru/mongo:latest
+    command: mongod --shardsvr --replSet shard2ReplSet --port 27020
+    ports:
+      - "27020:27020"
+    volumes:
+      - shard2_replica1_data:/data/db
+
+  # Шард 2 - Реплика 2 (Secondary)
+  shard2_replica2:
+    container_name: shard2_replica2
+    image: dh-mirror.gitverse.ru/mongo:latest
+    command: mongod --shardsvr --replSet shard2ReplSet --port 27020
+    volumes:
+      - shard2_replica2_data:/data/db
+
+  # Шард 2 - Реплика 3 (Secondary)
+  shard2_replica3:
+    container_name: shard2_replica3
+    image: dh-mirror.gitverse.ru/mongo:latest
+    command: mongod --shardsvr --replSet shard2ReplSet --port 27020
+    volumes:
+      - shard2_replica3_data:/data/db
 
   # Redis для кеширования
   redis:
-    image: redis:alpine
     container_name: redis
+    image: redis:7-alpine
     ports:
-      - "6379:6379"
-    networks:
-      - mongo-network
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
+      - "6380:6379"
+    volumes:
+      - redis_data:/data
 
   # API приложение
   pymongo_api:
     container_name: pymongo_api
-    image: kazhem/pymongo_api:1.0.0
+    build: 
+      context: api_app
+      dockerfile: Dockerfile
     depends_on:
-      mongos:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
+      - mongos
+      - redis
     ports:
-      - "8080:8080"
+      - 8080:8080
     environment:
-      MONGODB_URL: "mongodb://mongos:27017"
+      MONGODB_URL: "mongodb://mongos:27017/somedb?retryWrites=true&w=majority&directConnection=false"
       MONGODB_DATABASE_NAME: "somedb"
       REDIS_URL: "redis://redis:6379"
-    networks:
-      - mongo-network
 
 volumes:
   config1_data:
   config2_data:
   config3_data:
-  shard1_1_data:
-  shard1_2_data:
-  shard1_3_data:
-  shard2_1_data:
-  shard2_2_data:
-  shard2_3_data:
-
-networks:
-  mongo-network:
-    driver: bridge
+  shard1_replica1_data:
+  shard1_replica2_data:
+  shard1_replica3_data:
+  shard2_replica1_data:
+  shard2_replica2_data:
+  shard2_replica3_data:
+  redis_data:
